@@ -1,0 +1,4 @@
+* zadd
+* zrange
+* zrangebyscore
+* zrem

@@ -1,0 +1,4 @@
+* hset
+* hget
+* hgetall
+* hdel

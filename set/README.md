@@ -1,0 +1,4 @@
+* sadd
+* srem
+* smembers
+* sismeber
