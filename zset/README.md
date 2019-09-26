@@ -2,3 +2,5 @@
 * zrange
 * zrangebyscore
 * zrem
+* zremrangebyrank
+* zcard
