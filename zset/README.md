@@ -21,3 +21,7 @@
 ### 集合操作
 * `zinterstore dest-key key-count key [key ...]` 交集
 * `zunionstore dest-key key-count key [key ...]` 并集
+
+并集：以属于A或属于B的元素为元素的集合成为A与B的并（集） A | B
+交集：以属于A且属于B的元素为元素的集合成为A与B的交（集） A & B
+差：以属于A而不属于B的元素为元素的集合成为A与B的差（集） A ^ B
