@@ -26,8 +26,8 @@ public class Article {
         map.put("time", System.currentTimeMillis() + "");
         map.put("vote", "0");
         Jedis redis = RedisUtil.getRedis();
-        redis.hmset("article:" + aid, map);
-        redis.zadd("score:article", 0, Integer.toString(aid));
+        redis.hmset("article:article:" + aid, map);
+        redis.zadd("article:article_score", 0, aid + "");
     }
 
     /**
@@ -43,7 +43,7 @@ public class Article {
         Jedis       redis      = RedisUtil.getRedis();
         Set<String> articleIds = redis.zrevrange(key, start, end);
         for (String aid : articleIds) {
-            Map<String, String> article = redis.hgetAll("article:" + aid);
+            Map<String, String> article = redis.hgetAll("article:article:" + aid);
             System.out.println(article);
         }
         System.out.println("===");
@@ -58,7 +58,7 @@ public class Article {
     public void addToGroup(int aid, String[] groups) {
         Jedis redis = RedisUtil.getRedis();
         for (String group : groups) {
-            redis.sadd("article_group:" + group, aid + "");
+            redis.sadd("article:group:" + group, aid + "");
         }
     }
 
@@ -72,7 +72,7 @@ public class Article {
     public void removeToGroup(int aid, String[] groups) {
         Jedis redis = RedisUtil.getRedis();
         for (String group : groups) {
-            redis.srem("article_group:" + group, aid + "");
+            redis.srem("article:group:" + group, aid + "");
         }
     }
 
@@ -85,9 +85,9 @@ public class Article {
      */
     public void getGroup(String group, int page) {
         Jedis  redis = RedisUtil.getRedis();
-        String key   = "score:group:" + group;
+        String key   = "article:score_group:" + group;
         if (!redis.exists(key)) {
-            redis.zinterstore(key, "article_group:" + group, "score:article");
+            redis.zinterstore(key, "article:group:" + group, "article:article_score");
             redis.expire(key, 60);
         }
         getPage(key, page);

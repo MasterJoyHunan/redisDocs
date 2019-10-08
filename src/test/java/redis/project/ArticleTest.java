@@ -24,7 +24,7 @@ public class ArticleTest {
     @Test
     public void getPage() {
         for (int i = 1; i < 10; i++) {
-            article.getPage("score:article", i);
+            article.getPage("article:article_score", i);
         }
     }
 

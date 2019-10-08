@@ -18,9 +18,9 @@ public class Vote {
      */
     public void articleVote(int aid, int uid) {
         Jedis redis = RedisUtil.getRedis();
-        if (redis.sadd("vote:article:" + aid, uid + "") == 1) {
-            redis.zincrby("score:article", Const.VOTE_SCORE, aid + "");
-            redis.hincrBy("article:" + aid, "vote", 1);
+        if (redis.sadd("article:vote:" + aid, uid + "") == 1) {
+            redis.zincrby("article:article_score", Const.VOTE_SCORE, aid + "");
+            redis.hincrBy("article:article:" + aid, "vote", 1);
         }
     }
 }

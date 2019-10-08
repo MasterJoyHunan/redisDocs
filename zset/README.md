@@ -15,8 +15,8 @@
 * `zrevrangebyscore key start end [withscores] [limit offset count]` 返回有序集合中分值 start 到 end 之间的成员（从大到小排序）
 
 ### 删除
-* `zremrangebyrank key start end` 将有序集合中分值排名 start 到 end 之间的成员移除（从大到小排序）
-* `zremrangebyscore key start end` 将有序集合中分值 start 到 end 之间的成员移除（从大到小排序）
+* `zremrangebyrank key start end` 将有序集合中分值排名 start 到 end 之间的成员移除（从小到大排序）
+* `zremrangebyscore key start end` 将有序集合中分值 start 到 end 之间的成员移除（从小到大排序）
 
 ### 集合操作
 * `zinterstore dest-key key-count key [key ...]` 交集
