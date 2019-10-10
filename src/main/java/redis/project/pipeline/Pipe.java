@@ -1,14 +1,15 @@
-package redis.project.trans;
+package redis.project.pipeline;
 
 import redis.RedisUtil;
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.Pipeline;
 
 /**
+ * 管道
  * @author joy
- * @time 2019/10/08 09:04
+ * @time 2019/10/09 08:25
  */
-public class NotTranc extends Thread {
+public class Pipe extends Thread {
 
 
     @Override
@@ -22,13 +23,13 @@ public class NotTranc extends Thread {
             e.printStackTrace();
         }
         pipeline.decr("incr");
-        pipeline.exec();
+        pipeline.syncAndReturnAll();
 
     }
 
     public static void main(String[] args) {
         for (int i = 0; i < 3; i++) {
-            new NotTranc().start();
+            new NotPipe().start();
         }
     }
 }
