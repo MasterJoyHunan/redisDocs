@@ -52,9 +52,9 @@ public class TrancTest {
 
         int    goodsId  = new Random().nextInt(500);
         double oldPrice = new Random().nextInt(20);
-        double offset = System.currentTimeMillis() % 2;
-        redis.zadd("market:", oldPrice + offset, Const.UID+ "|" + goodsId);
-        redis.zadd("market:", oldPrice , Const.UID+ "|" + goodsId);
+        double offset   = System.currentTimeMillis() % 2;
+        redis.zadd("market:", oldPrice + offset, Const.UID + "|" + goodsId);
+        redis.zadd("market:", oldPrice, Const.UID + "|" + goodsId);
         Tranc tranc = new Tranc();
         tranc.buyGoods(buyerUid, Const.UID, goodsId, oldPrice);
         tranc.buyGoods(buyerUid, Const.UID, goodsId, oldPrice);

@@ -16,6 +16,7 @@ public class Pipe extends Thread {
     public void run() {
         Jedis    redis    = RedisUtil.getRedis();
         Pipeline pipeline = redis.pipelined();
+        pipeline.multi();
         System.out.println("incr :" + pipeline.incr("incr"));
         try {
             sleep(1000);
@@ -23,8 +24,7 @@ public class Pipe extends Thread {
             e.printStackTrace();
         }
         pipeline.decr("incr");
-        pipeline.syncAndReturnAll();
-
+        pipeline.exec();
     }
 
     public static void main(String[] args) {
