@@ -3,6 +3,7 @@
 * `zrem key item [item ...]` 将一个或多个成员从有序集合中删除
 * `zcount key start end` 返回有序集合中分值 start 到 end 之间的成员数量
 * `zscore key item` 返回有序集合中 item 的分值
+* `zcard key` 返回有序集合中元素个数
 
 ### 获取排名
 * `zrank key item` 返回有序集合中 item 的排名（从小到大排序）
