@@ -2,6 +2,8 @@ package redis.project.logs;
 
 import org.junit.Test;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Random;
 
 import static org.junit.Assert.*;
@@ -43,4 +45,21 @@ public class LogTest {
 //        new Log().getCount("kill", 300);
     }
 
+
+    @Test
+    public void updateStats() {
+        for (int i = 0; i < 5; i++) {
+            int rand = new Random().nextInt(20);
+            new Log().updateStats("page", rand);
+        }
+    }
+
+
+    @Test
+    public void getStats() {
+        Map<String, Double> res = new Log().getStats("page");
+        for (Map.Entry<String, Double> entry : res.entrySet()) {
+            System.out.println(entry.getKey() + " => " + entry.getValue());
+        }
+    }
 }

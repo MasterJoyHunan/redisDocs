@@ -2,14 +2,10 @@ package redis.project.logs;
 
 
 import redis.RedisUtil;
-import redis.clients.jedis.Jedis;
-import redis.clients.jedis.Pipeline;
-import redis.clients.jedis.Transaction;
+import redis.clients.jedis.*;
 
 import java.text.SimpleDateFormat;
-import java.util.Date;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 /**
  * @author joy
@@ -104,17 +100,105 @@ public class Log {
 
 
     /**
-     *
-     *
-     * @param name 页面
+     * @param name      页面
      * @param precision 时间进度
      */
     public void getCount(String name, int precision) {
-        String hash = precision + ":" + name;
-        Jedis  redis = RedisUtil.getRedis();
-        Map<String, String> res = redis.hgetAll("LOG:count:" + hash);
+        String              hash  = precision + ":" + name;
+        Jedis               redis = RedisUtil.getRedis();
+        Map<String, String> res   = redis.hgetAll("LOG:count:" + hash);
         for (Map.Entry<String, String> entry : res.entrySet()) {
             System.out.println(entry.getKey() + " => " + entry.getValue());
         }
+    }
+
+
+    /**
+     * 记录某个上下文的最大值，最小值，总和，开方，数量
+     *
+     * @param name  上下文
+     * @param value 数值
+     */
+    public void updateStats(String name, double value) {
+        String destination = "STATS:" + name;
+        String startTime   = destination + ":start";
+        Jedis  redis       = RedisUtil.getRedis();
+        long   deadline    = System.currentTimeMillis() + 500;
+        while (System.currentTimeMillis() < deadline) {
+            redis.watch(startTime);
+            long        currentTime   = System.currentTimeMillis();
+            String      lastWrite     = redis.get(startTime);
+            long        lastWriteTime = lastWrite == null ? 0 : Long.parseLong(lastWrite);
+            Transaction trans         = redis.multi();
+
+            // 如果当前时间 大于上次写入时间的N豪秒
+            long offset = 1000 * 60 * 60;
+            if (currentTime - lastWriteTime >= offset) {
+                trans.rename(destination + ":record", destination + ":last");
+                trans.rename(destination + ":list", destination + ":pre_list");
+                trans.rename(startTime, destination + ":pre_start");
+                trans.set(startTime, currentTime + "");
+            }
+
+            // 生成临时zset
+            String templateKey1 = UUID.randomUUID().toString();
+            String templateKey2 = UUID.randomUUID().toString();
+            trans.zadd(templateKey1, value, "min");
+            trans.zadd(templateKey2, value, "max");
+
+            // 查并集
+            trans.zunionstore(destination + ":record",
+                    new ZParams().aggregate(ZParams.Aggregate.MIN),
+                    destination + ":record", templateKey1);
+            trans.zunionstore(destination + ":record",
+                    new ZParams().aggregate(ZParams.Aggregate.MAX),
+                    destination + ":record", templateKey2);
+
+            // 一系列自增操作
+            trans.del(templateKey1, templateKey2);
+            trans.zincrby(destination + ":record", 1, "count");
+            trans.zincrby(destination + ":record", value, "sum");
+            trans.zincrby(destination + ":record", value * value, "sumsq");
+            trans.hset(destination + ":list", System.currentTimeMillis() + "", value + "");
+            List<Object> res = trans.exec();
+            if (res.size() == 0) {
+                continue;
+            }
+            return;
+        }
+    }
+
+
+    /**
+     * 获取某个上下文的最大值，最小值，总和，开方，数量，平均值，标准差
+     *
+     * @param name 上下文
+     * @return map
+     */
+    public Map<String, Double> getStats(String name) {
+        String     key   = "STATS:" + name + ":record";
+        Jedis      redis = RedisUtil.getRedis();
+        Set<Tuple> res   = redis.zrangeWithScores(key, 0, -1);
+        if (res.size() == 0) {
+            return null;
+        }
+
+        // 将set转换为map
+        Map<String, Double> resMap = new HashMap<>();
+        for (Tuple tu : res) {
+            resMap.put(tu.getElement(), tu.getScore());
+        }
+        double count = resMap.get("count");
+
+        // 平均值
+        double avg = resMap.get("sum") / count;
+        resMap.put("avg", avg);
+
+        // 标准差
+        double numerator = resMap.get("sumsq") - Math.pow(resMap.get("sum"), 2) / count;
+        double sd        = Math.pow(numerator / (count > 1 ? count - 1 : 1), 0.5);
+        resMap.put("sd", sd);
+
+        return resMap;
     }
 }
