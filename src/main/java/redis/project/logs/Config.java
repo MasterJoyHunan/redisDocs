@@ -28,9 +28,17 @@ public class Config {
     /**
      * 等待一秒时间
      */
-    private static int waitTime = 1000;
+    private static final int WAIT_TIME = 1000;
 
-    private static
+    /**
+     * 配置缓存
+     */
+    private static final Map<String, String> CONFIGS = new HashMap<>();
+
+    /**
+     * 何时获取过配置
+     */
+    private static final Map<String, Long> CHECKED = new HashMap<>();
 
 
     /**
@@ -43,8 +51,8 @@ public class Config {
         if (lastCheckTime < nowTime - 1000) {
             System.out.println(nowTime);
             lastCheckTime = nowTime;
-            Jedis  redis = RedisUtil.getRedis();
-            String flag  = redis.get("CONFIG:is_under_maintenance");
+            Jedis redis = RedisUtil.getRedis();
+            String flag = redis.get("CONFIG:is_under_maintenance");
             IS_UNDER_MAINTENANCE = "1".equals(flag);
         }
         return IS_UNDER_MAINTENANCE;
@@ -52,6 +60,7 @@ public class Config {
 
     /**
      * 设置配置
+     *
      * @param keyName
      * @param config
      */
@@ -60,27 +69,19 @@ public class Config {
         redis.set("CONFIG:" + keyName, config);
     }
 
-    public Map<String, String> getConfig(String keyName) {
-        int wait = 1000;
-        String key = "CONFIG:" + keyName ;
-
+    public String getConfig(String keyName) {
+        String key = "CONFIG:" + keyName;
+        Long currentTime = System.currentTimeMillis();
         Long lastChecked = CHECKED.get(key);
-        if (lastChecked == null || lastChecked < System.currentTimeMillis() - wait){
-            CHECKED.put(key, System.currentTimeMillis());
+        Jedis redis = RedisUtil.getRedis();
 
-            String value = conn.get(key);
-            Map<String,Object> config = null;
-            if (value != null){
-                Gson gson = new Gson();
-                config = (Map<String,Object>)gson.fromJson(
-                        value, new TypeToken<Map<String,Object>>(){}.getType());
-            }else{
-                config = new HashMap<String,Object>();
-            }
+        if (lastChecked == null || lastChecked < currentTime - WAIT_TIME) {
+            // 将最后获取该配置的时间写入
+            CHECKED.put(key, currentTime);
 
-            CONFIGS.put(key, config);
+            // 获取配置 并将配置写入全局
+            CONFIGS.put(key, redis.get(key));
         }
-
         return CONFIGS.get(key);
     }
 

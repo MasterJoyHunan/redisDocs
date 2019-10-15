@@ -23,4 +23,22 @@ public class ConfigTest {
             }
         }
     }
+
+    @Test
+    public void setConfig() {
+        new Config().setConfig("is_init", 1 + "");
+    }
+
+
+    @Test
+    public void getConfig() {
+        for (int i = 0; i < 10; i++) {
+            System.out.println(new Config().getConfig("is_init"));
+            try {
+                Thread.sleep(new Random().nextInt(500));
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
+    }
 }
