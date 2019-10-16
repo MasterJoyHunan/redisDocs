@@ -60,10 +60,7 @@ public class ContactTest {
     @Test
     public void redisAutocompleteList() {
         Contact contact = new Contact();
-        contact.redisAutocompleteList(Const.UID, "abc");
-        contact.redisAutocompleteList(Const.UID, "a");
-        contact.redisAutocompleteList(Const.UID, "");
-//        List<String> res = new Contact().redisAutocompleteList(Const.UID, "abc");
+        contact.redisAutocompleteList(Const.UID, "guild", "abc");
     }
 
 }

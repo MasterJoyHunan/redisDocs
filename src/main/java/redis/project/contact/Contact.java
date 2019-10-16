@@ -7,6 +7,7 @@ import redis.clients.jedis.Transaction;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -24,9 +25,9 @@ public class Contact {
      * @param contact 联系人
      */
     public void updateContact(int uid, String contact) {
-        Jedis       redis = RedisUtil.getRedis();
+        Jedis redis = RedisUtil.getRedis();
         Transaction trans = redis.multi();
-        String      key   = "CONTACT:" + uid + "_recent";
+        String key = "CONTACT:" + uid + "_recent";
         trans.lrem(key, 0, contact);
         trans.lpush(key, contact);
         trans.ltrim(key, 0, 99);
@@ -40,8 +41,8 @@ public class Contact {
      * @return List<String>
      */
     public List<String> getContact(int uid) {
-        Jedis  redis = RedisUtil.getRedis();
-        String key   = "CONTACT:" + uid + "_recent";
+        Jedis redis = RedisUtil.getRedis();
+        String key = "CONTACT:" + uid + "_recent";
         return redis.lrange(key, 0, -1);
     }
 
@@ -53,8 +54,8 @@ public class Contact {
      * @param contact 联系人
      */
     public void removeContact(int uid, String contact) {
-        Jedis  redis = RedisUtil.getRedis();
-        String key   = "CONTACT:" + uid + "_recent";
+        Jedis redis = RedisUtil.getRedis();
+        String key = "CONTACT:" + uid + "_recent";
         redis.lrem(key, 0, contact);
     }
 
@@ -67,7 +68,7 @@ public class Contact {
      * @return List<String>
      */
     public List<String> simpleAutocompleteList(int uid, String prefix) {
-        List<String> res    = getContact(uid);
+        List<String> res = getContact(uid);
         List<String> newRes = new ArrayList<>();
         for (String contact : res) {
             if (contact.contains(prefix)) {
@@ -87,16 +88,34 @@ public class Contact {
      * @return List<String>
      */
     public List<String> redisAutocompleteList(int uid, String guild, String prefix) {
-        String[] range     = findPrefixRange(prefix);
-        String   unique    = UUID.randomUUID().toString();
-        String   start     = range[0] + unique;
-        String   end       = range[1] + unique;
-        String   guildKey = "GUILD:" + guild;
+        String[] range = findPrefixRange(prefix);
+        String unique = UUID.randomUUID().toString();
+        String start = range[0] + unique;
+        String end = range[1] + unique;
+        String guildKey = "GUILD:" + guild;
         Jedis redis = RedisUtil.getRedis();
         redis.zadd(guildKey, 0, start);
         redis.zadd(guildKey, 0, end);
-        
-        return null;
+        while (true) {
+            redis.watch(guildKey);
+            int startIndex = redis.zrank(guildKey, start).intValue();
+            int endIndex = redis.zrank(guildKey, end).intValue();
+            endIndex = Math.min(startIndex + 9, endIndex);
+
+            Transaction trans = redis.multi();
+            trans.zrange(guildKey, startIndex, endIndex);
+            trans.zrem(guildKey, start, end);
+            List<Object> res = trans.exec();
+            if (res.size() == 0) {
+                continue;
+            }
+            Set<String> getRange = (Set<String>) res.get(res.size() - 1);
+            for (String re :
+                    getRange) {
+                System.out.println(re);
+            }
+            return null;
+        }
     }
 
 
@@ -137,10 +156,10 @@ public class Contact {
      */
     private String[] findPrefixRange(String prefix) {
         // abc => [ "abb{", "abc{" ]
-        int    position = prefix.length() - 1;
-        String pre      = prefix.substring(0, position);
-        String start    = pre + CHARACTERS.charAt(CHARACTERS.indexOf(prefix.charAt(position)) - 1) + "{";
-        String end      = prefix + '{';
+        int position = prefix.length() - 1;
+        String pre = prefix.substring(0, position);
+        String start = pre + CHARACTERS.charAt(CHARACTERS.indexOf(prefix.charAt(position)) - 1) + "{";
+        String end = prefix + '{';
         return new String[]{start, end};
     }
 
