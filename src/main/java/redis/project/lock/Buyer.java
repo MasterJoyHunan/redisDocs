@@ -61,7 +61,7 @@ public class Buyer {
             } finally {
                 // 不管怎么样 都要解锁
                 // DistributedLock.releaseLock(markerKey, uniqueId);
-                CountingSemaphore.releaseSemaphroe(markerKey, uniqueId);
+                CountingSemaphore.releaseSemaphore(markerKey, uniqueId);
             }
         }
     }

@@ -62,7 +62,7 @@ public class CountingSemaphore {
      * @param lockName 锁名
      * @param uniqueId 锁成员
      */
-    public static void releaseSemaphroe(String lockName, String uniqueId) {
+    public static void releaseSemaphore(String lockName, String uniqueId) {
         Jedis redis = RedisUtil.getRedis();
         redis.zrem("SEMAPHROE:" + lockName, uniqueId);
     }
