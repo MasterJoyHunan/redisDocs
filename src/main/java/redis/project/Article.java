@@ -20,7 +20,7 @@ public class Article {
      * @param aid 文章ID
      */
     public void add(int aid) {
-        Map map = new HashMap();
+        Map<String, String> map = new HashMap<>();
         map.put("id", aid + "");
         map.put("title", "hello world");
         map.put("time", System.currentTimeMillis() + "");

@@ -100,16 +100,16 @@ public class Contact {
             redis.watch(guildKey);
             int startIndex = redis.zrank(guildKey, start).intValue();
             int endIndex = redis.zrank(guildKey, end).intValue();
-            endIndex = Math.min(startIndex + 9, endIndex);
+            endIndex = Math.min(startIndex + 9, endIndex - 2);
 
             Transaction trans = redis.multi();
-            trans.zrange(guildKey, startIndex, endIndex);
             trans.zrem(guildKey, start, end);
+            trans.zrange(guildKey, startIndex, endIndex);
             List<Object> res = trans.exec();
             if (res.size() == 0) {
                 continue;
             }
-            Set<String> getRange = (Set<String>) res.get(res.size() - 1);
+            Set<String> getRange = (Set<String>) res.get(1);
             for (String re :
                     getRange) {
                 System.out.println(re);
