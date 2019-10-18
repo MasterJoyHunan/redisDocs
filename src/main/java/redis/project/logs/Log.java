@@ -43,17 +43,16 @@ public class Log {
     public void commonLog(String name, String msg, String level) {
         String key      = "LOG_COMMON:" + name + ":" + level;
         String startKey = key + ":start";
-        long   end      = System.currentTimeMillis() + 5;
         Jedis  redis    = RedisUtil.getRedis();
+        long   end      = System.currentTimeMillis() + 5;
         String newMsg   = "[" + new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date()) + "] " + msg;
         while (System.currentTimeMillis() < end) {
             redis.watch(startKey);
-            String      hourStart = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date());
+            String      hourStart = new SimpleDateFormat("yyyy-MM-dd HH:mm:00").format(new Date());
             String      existing  = redis.get(startKey);
             Transaction trans     = redis.multi();
             existing = existing == null ? "" : existing;
 
-            //
             if (hourStart.compareTo(existing) > 0) {
                 // 上次记录的数据
                 trans.rename(key + ":record", key + ":last");
@@ -62,12 +61,13 @@ public class Log {
                 // 记录最新的时间
                 trans.set(startKey, hourStart);
             }
+
+            // 记录日志
             trans.zincrby(key + ":count", 1, msg);
-
             trans.lpush(key + ":record", newMsg);
-            trans.ltrim(key + ":record", 0, 100);
-
+            trans.ltrim(key + ":record", 0, 99);
             List<Object> res = trans.exec();
+
             if (res.size() == 0) {
                 continue;
             }

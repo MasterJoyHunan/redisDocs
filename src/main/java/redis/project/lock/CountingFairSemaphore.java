@@ -27,6 +27,7 @@ public class CountingFairSemaphore {
      */
     public static final int TIME_OUT = 1000;
 
+
     /**
      * 获取公平信号量锁
      *
@@ -34,12 +35,16 @@ public class CountingFairSemaphore {
      * @return
      */
     public static String acquireSemaphore(String lockName) {
-        String uniqueId = UUID.randomUUID().toString();
-        String lockOwnerKey = "SEMAPHORE:" + lockName + ":owner";
+        // 超时集合
         String lockKey = "SEMAPHORE:" + lockName;
+        // 排序集合
+        String lockOwnerKey = "SEMAPHORE:" + lockName + ":owner";
+        // 自增计数器
         String countKey = "SEMAPHORE_COUNT:" + lockName;
-        long currentTime = System.currentTimeMillis();
-        Jedis redis = RedisUtil.getRedis();
+
+        String uniqueId    = UUID.randomUUID().toString();
+        long   currentTime = System.currentTimeMillis();
+        Jedis  redis       = RedisUtil.getRedis();
 
         Transaction trans = redis.multi();
         trans.zremrangeByScore(lockKey, 0, currentTime - TIME_OUT);
@@ -51,10 +56,10 @@ public class CountingFairSemaphore {
         // 自增计数器
         trans.incr(countKey);
         List<Object> results = trans.exec();
-        int counter = ((Long) results.get(results.size() - 1)).intValue();
+        int          counter = ((Long) results.get(results.size() - 1)).intValue();
 
-        // 将 [id => 当前时间] 写入计数信号量有序集合
-        // 将 [id => 自增计数器] 写入计数信号量(所有者)有序集合
+        // 将 [id => 当前时间] 写入超时集合
+        // 将 [id => 自增计数器] 写入排序集合
         // 如果写入成功计算是否超出上线, 超出上限则删除
         trans = redis.multi();
         trans.zadd(lockKey, currentTime, uniqueId);
@@ -88,5 +93,43 @@ public class CountingFairSemaphore {
         trans.zrem("SEMAPHORE:" + lockName + ":owner", uniqueId);
         trans.zrem("SEMAPHORE:" + lockName, uniqueId);
         trans.exec();
+    }
+
+
+    /**
+     * 重置信号量有效时间
+     *
+     * @param lockName 锁名
+     * @param uniqueId 信号量
+     * @return
+     */
+    public static boolean refreshSemaphore(String lockName, String uniqueId) {
+        Jedis redis = RedisUtil.getRedis();
+        Long  flag  = redis.zadd("SEMAPHORE:" + lockName, System.currentTimeMillis(), uniqueId);
+
+        // 如果加入成功，则说明是不存在于
+        if (flag != 0) {
+            releaseSemaphore(lockName, uniqueId);
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * 消除竞争条件，在获取锁的情况下再获取锁
+     *
+     * @param lockName 锁名
+     * @return
+     */
+    public static String acquireSemaphoreWithLock(String lockName) {
+        String uniqueId = DistributedLock.acquireLock(lockName);
+        if (uniqueId == null) {
+            return null;
+        }
+        try {
+            return acquireSemaphore(lockName);
+        } finally {
+            DistributedLock.releaseLock(lockName, uniqueId);
+        }
     }
 }

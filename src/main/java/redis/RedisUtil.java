@@ -8,9 +8,14 @@ import redis.clients.jedis.Jedis;
  */
 public class RedisUtil {
 
-    public static Jedis getRedis() {
-        Jedis redis = new Jedis("localhost");
+    public static final Jedis redis;
+
+    static {
+        redis = new Jedis("localhost");
         redis.select(1);
+    }
+
+    public static Jedis getRedis() {
         return redis;
     }
 }

@@ -24,8 +24,8 @@ public class DistributedLock {
      */
     public static String acquireLock(String lockName) {
         String uniqueId = UUID.randomUUID().toString();
-        long   deadline = System.currentTimeMillis() + TIME_OUT;
         Jedis  redis    = RedisUtil.getRedis();
+        long   deadline = System.currentTimeMillis() + TIME_OUT;
         while (System.currentTimeMillis() < deadline) {
             if (redis.setnx("LOCK:" + lockName, uniqueId) != 0) {
                 return uniqueId;
@@ -49,7 +49,7 @@ public class DistributedLock {
         Jedis  redis        = RedisUtil.getRedis();
         String fullLockName = "LOCK:" + lockName;
         while (true) {
-            redis.watch(lockName);
+            redis.watch(fullLockName);
             if (!uniqueId.equals(redis.get(fullLockName))) {
                 redis.unwatch();
                 return;

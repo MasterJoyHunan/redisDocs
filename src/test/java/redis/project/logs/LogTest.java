@@ -24,9 +24,8 @@ public class LogTest {
 
     @Test
     public void commonLog() {
-        for (int i = 0; i < 108; i++) {
-            int random = new Random().nextInt(20);
-            new Log().commonLog("page", "" + random, "info");
+        for (int i = 1; i <= 100; i++) {
+            new Log().commonLog("page", "" + i, "info");
         }
     }
 
