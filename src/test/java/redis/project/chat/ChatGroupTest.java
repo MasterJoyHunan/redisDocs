@@ -24,7 +24,7 @@ public class ChatGroupTest {
 
     @Test
     public void sendMessage() {
-        new ChatGroup().sendMessage(1 + "", "牛三", "boom sakalaka");
+        new ChatGroup().sendMessage(1 + "", "牛三", "boom sakalaka" + Math.random());
     }
 
 

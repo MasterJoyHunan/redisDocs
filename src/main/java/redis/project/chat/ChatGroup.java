@@ -2,13 +2,10 @@ package redis.project.chat;
 
 
 import com.google.gson.Gson;
-import com.google.gson.reflect.TypeToken;
 import redis.RedisUtil;
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.Transaction;
 import redis.clients.jedis.Tuple;
-import redis.project.lock.DistributedLock;
-import redis.project.lock.DistributedLockV2;
 import redis.project.lock.DistributedLockV3;
 
 import java.util.*;
@@ -89,7 +86,7 @@ public class ChatGroup {
      * @param recipient 登录人
      */
     public void getGroupMessage(String recipient) {
-     /*   String      seen        = "SEEN:" + recipient;
+        String      seen        = "SEEN:" + recipient;
         Jedis       redis       = RedisUtil.getRedis();
         Set<Tuple>  joinedGroup = redis.zrangeWithScores(seen, 0, -1);
         Transaction trans       = redis.multi();
@@ -127,10 +124,9 @@ public class ChatGroup {
 
 
         // 删除所有人已看的消息
-        Tuple currentGroup = redis.zrangeWithScores("CHAT:GROUP:" + groupId, 0, 0).iterator().next();
-        trans.zremrangeByScore("CHAT:GROUP_MESSAGE:" + groupId, 0, currentGroup.getScore());
+//        Tuple currentGroup = redis.zrangeWithScores("CHAT:GROUP:" + groupId, 0, 0).iterator().next();
+//        trans.zremrangeByScore("CHAT:GROUP_MESSAGE:" + groupId, 0, currentGroup.getScore());
         // 使用lua最佳
-*/
     }
 
 
@@ -140,32 +136,31 @@ public class ChatGroup {
      *
      * @param recipient 登录人
      */
-    // 未完成
     public void getGroupMessageWithLua(String recipient) {
         Jedis redis = RedisUtil.getRedis();
         String script = "local myGroup = redis.call(\"zrange\", \"SEEN:\" .. KEYS[1], 0, -1, \"withscores\") -- 查所有我加入的群组\n" +
                 "local msg = {}\n" +
-                "local arr_index = 1\n" +
                 "local groupId = 0\n" +
                 "for index, v in ipairs(myGroup) do --循环我加入的群组\n" +
                 "    if index % 2 == 0 then\n" +
                 "        -- groupId => 群组ID |  v => 已阅读的message\n" +
-                "\n" +
                 "        -- 1. 返回所有未读消息\n" +
                 "        local message = redis.call(\"zrangebyscore\", \"CHAT:GROUP_MESSAGE:\" .. groupId, v + 1, \"inf\", \"withscores\")\n" +
-                "\n" +
                 "        -- 2. 更新 SEEN:N 和 CHAT:GROUP:N 的阅读\n" +
                 "        if not (next(message) == nil) then\n" +
-                "            msg[groupId] = message\n" +
                 "            local max_read = 0\n" +
+                "            local arr_index = 1\n" +
+                "            msg[groupId] = {}\n" +
                 "            for index2, vv in ipairs(message) do\n" +
                 "                if index2 % 2 == 0 and tonumber(vv) > max_read then\n" +
-                "                    max_read =  tonumber(vv)\n" +
+                "                    max_read = tonumber(vv)\n" +
+                "                else\n" +
+                "                    msg[groupId][arr_index] = vv\n" +
+                "                    arr_index = arr_index + 1\n" +
                 "                end\n" +
                 "            end\n" +
                 "            redis.call(\"zadd\", \"SEEN:\" .. KEYS[1], max_read, groupId)\n" +
                 "            redis.call(\"zadd\", \"CHAT:GROUP:\" .. groupId, max_read, KEYS[1])\n" +
-                "\n" +
                 "            -- 3. 删除所有人已读的message\n" +
                 "            local min_not_read = redis.call(\"zrange\", \"CHAT:GROUP:\" .. groupId, 0, 0, \"withscores\")\n" +
                 "            if not (next(min_not_read) == nil) then\n" +
@@ -182,7 +177,14 @@ public class ChatGroup {
                 "else\n" +
                 "    return cjson.encode(msg)\n" +
                 "end\n";
-        Object res = redis.eval(script, 1, recipient);
+        String res = (String)redis.eval(script, 1, recipient);
+        if (res == null) {
+            return;
+        }
+        Gson json = new Gson();
+        Map<String, String> message = json.fromJson(res, Map.class);
+
+        System.out.println(message);
     }
 
 
