@@ -4,10 +4,9 @@ import redis.RedisUtil;
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.Transaction;
 
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * @author joy
@@ -15,10 +14,14 @@ import java.util.UUID;
  */
 public class InvertedIndexes {
 
-    public static final Set<String> STOP_WORD = new HashSet<>();
+    public static final Set<String> STOP_WORD     = new HashSet<>();
+    public static final Pattern     INDEX_PATTERN = Pattern.compile("[A-Za-z']{2,}");
+    public static final Pattern     QUREY_PATTERN = Pattern.compile("[+-]?[a-zA-Z']{2,}");
+
 
     static {
-        for (String word : ("able about across after all almost also am among " +
+        // 非用词
+        String stopWord = "able about across after all almost also am among " +
                 "an and any are as at be because been but by can " +
                 "cannot could dear did do does either else ever " +
                 "every for from get got had has have he her hers " +
@@ -29,7 +32,8 @@ public class InvertedIndexes {
                 "some than that the their them then there these " +
                 "they this tis to too twas us wants was we were " +
                 "what when where which while who whom why will " +
-                "with would yet you your").split(" ")) {
+                "with would yet you your";
+        for (String word : (stopWord).split(" ")) {
             STOP_WORD.add(word);
         }
     }
@@ -38,6 +42,8 @@ public class InvertedIndexes {
     /**
      * 将标记化的文档加入redis
      *
+     * @param id      文章ID
+     * @param content 文章内容
      * @return
      */
     public int indexDocument(String id, String content) {
@@ -51,24 +57,90 @@ public class InvertedIndexes {
         return res.size();
     }
 
-    public String setCommon(String method, String... items) {
-        String      id    = UUID.randomUUID().toString();
-        Jedis       redis = RedisUtil.getRedis();
-        Transaction trans = redis.multi();
-        String[]    keys  = new String[items.length];
-        for (int i = 0; i < items.length; i++) {
-            keys[i] = "WORD_INDEX:" + items[i];
+
+    public String[] parseQuery(String query) {
+        // 不包含的单词
+        Set<String> unwanted = new HashSet<>();
+        // 同义词
+        Set<String> current = new HashSet<>();
+        // 结果集
+        List<List<String>> all = new ArrayList<>();
+
+        Matcher matcher = QUREY_PATTERN.matcher(query);
+        while (matcher.find()) {
+            String word   = matcher.group().toLowerCase();
+            char   prefix = word.charAt(0);
+            if (prefix == '+' || prefix == '-') {
+                word = word.substring(1);
+            }
+            if (word.length() <= 2 || STOP_WORD.contains(word)) {
+                continue;
+            }
+            // 希望在结果集中不含有该单词
+            if (prefix == '-') {
+                unwanted.add(word);
+                continue;
+            }
+            // 某个单词前面是 + 则表示该单词和该单词的前一个单词是同义词
+            // 该单词的前一个单词的前面是 - 则找前前，以此类推
+            if (!current.isEmpty() && prefix != '+') {
+                all.add(new ArrayList<>(current));
+                current.clear();
+            }
+            current.add(word);
         }
-        try {
-            trans.getClass()
-                    .getDeclaredMethod(method, String.class, String[].class)
-                    .invoke(trans, "WORD_INDEX:" + id, keys);
-        } catch (Exception e) {
-            throw new RuntimeException("redis method " + method + " not existent");
+        if (!current.isEmpty()) {
+            all.add(new ArrayList<>(current));
         }
-        trans.expire("WORD_INDEX:" + id, 30);
-        trans.exec();
-        return id;
+        return null;
+    }
+
+
+    public String[] parseQuery2(String query) {
+        // 不包含的单词
+        Set<String> unwanted = new HashSet<>();
+        // 放同义词的堆栈
+        Stack<String> current = new Stack<>();
+        // 结果集
+        List<List<String>> all = new ArrayList<>();
+        // 同义词
+        List<String> synonym = new ArrayList<>();
+        // 栈顶元素
+        String top = null;
+
+
+        Matcher matcher = QUREY_PATTERN.matcher(query);
+        while (matcher.find()) {
+            String word   = matcher.group().toLowerCase();
+            char   prefix = word.charAt(0);
+            if (prefix == '+' || prefix == '-') {
+                word = word.substring(1);
+            }
+            if (word.length() <= 2 || STOP_WORD.contains(word)) {
+                continue;
+            }
+            // 希望在结果集中不含有该单词
+            if (prefix == '-') {
+                unwanted.add(word);
+                continue;
+            }
+            // 某个单词前面是 + 则表示该单词和该单词的前一个单词是同义词
+            // 该单词的前一个单词的前面是 - 则找前前，以此类推
+            if (prefix != '+') {
+                if ((top = current.pop()) != null) {
+                    synonym.add(top);
+                }
+                if (synonym.size() > 0) {
+                    all.add(synonym);
+                    synonym.clear();
+                }
+            }
+            current.push(word);
+        }
+        if (!current.isEmpty()) {
+            all.add(new ArrayList<>(current));
+        }
+        return null;
     }
 
 
@@ -81,6 +153,11 @@ public class InvertedIndexes {
     public Set<String> tokenize(String content) {
         Set<String> token = new HashSet<>();
         for (String word : content.split(" ")) {
+            Matcher matcher = INDEX_PATTERN.matcher(word);
+            if (!matcher.find()) {
+                continue;
+            }
+            word = matcher.group().toLowerCase();
             if (STOP_WORD.contains(word)) {
                 continue;
             }
@@ -118,4 +195,32 @@ public class InvertedIndexes {
     public String difference(String... item) {
         return setCommon("sdiffstore", item);
     }
+
+    /**
+     * 返回需查询的数据
+     *
+     * @param method 调用方法
+     * @param items  要查询的数据
+     * @return
+     */
+    private String setCommon(String method, String... items) {
+        String      id    = UUID.randomUUID().toString();
+        Jedis       redis = RedisUtil.getRedis();
+        Transaction trans = redis.multi();
+        String[]    keys  = new String[items.length];
+        for (int i = 0; i < items.length; i++) {
+            keys[i] = "WORD_INDEX:" + items[i];
+        }
+        try {
+            trans.getClass()
+                    .getDeclaredMethod(method, String.class, String[].class)
+                    .invoke(trans, "WORD_INDEX:" + id, keys);
+        } catch (Exception e) {
+            throw new RuntimeException("redis method " + method + " not existent");
+        }
+        trans.expire("WORD_INDEX:" + id, 30);
+        trans.exec();
+        return id;
+    }
+
 }
