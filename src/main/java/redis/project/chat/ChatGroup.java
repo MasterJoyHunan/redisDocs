@@ -215,8 +215,6 @@ public class ChatGroup {
         Transaction trans = redis.multi();
         // 1.删除在某个群组的用户的数据
         // 2.删除我加入的群组记录
-        // 3.如果是最后一个退群的，删除消息和消息自增ID
-        // 4.删除被所有人阅读过的消息
         trans.zrem("CHAT:GROUP:" + groupId, user);
         trans.zrem("SEEN:" + user, groupId + "");
         trans.zcard("CHAT:GROUP:" + groupId);
@@ -224,10 +222,13 @@ public class ChatGroup {
         if (res.size() == 0) {
             return;
         }
-        Integer leftCount = (Integer) res.get(res.size() - 1);
+
+        // 3.如果是最后一个退群的，删除消息和消息自增ID
+        Long leftCount = (Long) res.get(res.size() - 1);
         if (leftCount == 0) {
             redis.del("CHAT:GROUP_MESSAGE:" + groupId, "CHAT:MESSAGE_INC_ID:" + groupId);
         } else {
+            // 4.否则删除被所有人阅读过的消息
             Set<Tuple> notRead = redis.zrangeWithScores("CHAT:GROUP:" + groupId, 0, 0);
             if (notRead.size() == 0) {
                 return;

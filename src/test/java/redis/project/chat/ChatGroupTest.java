@@ -45,7 +45,7 @@ public class ChatGroupTest {
 
     @Test
     public void leaveChat() {
-
+        new ChatGroup().leaveChat(2, "BOBO");
     }
 
 }
