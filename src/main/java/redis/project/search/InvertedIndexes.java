@@ -1,7 +1,9 @@
 package redis.project.search;
 
 import redis.RedisUtil;
+import redis.base.Hash;
 import redis.clients.jedis.Jedis;
+import redis.clients.jedis.SortingParams;
 import redis.clients.jedis.Transaction;
 
 import java.util.*;
@@ -58,7 +60,76 @@ public class InvertedIndexes {
     }
 
 
-    public String[] parseQuery(String query) {
+    /**
+     * 搜索
+     *
+     * @param query 字符串
+     * @return
+     */
+    public String parseAndSearch(String query) {
+        Map<String, Object> res      = parseQuery(query);
+        List<List<String>>  search   = (List<List<String>>) res.get("all");
+        Set<String>         unwanted = (Set<String>) res.get("unwanted");
+        if (search.isEmpty()) {
+            return null;
+        }
+        List<String> toIntersect = new ArrayList<>();
+        for (List<String> current : search) {
+            if (current.size() > 1) {
+                toIntersect.add(union(current.toArray(new String[current.size()])));
+            } else {
+                toIntersect.add(union(current.get(0)));
+            }
+        }
+        String intersectResult = null;
+        if (toIntersect.size() == 1) {
+            intersectResult = toIntersect.get(0);
+        } else {
+            intersectResult = union(toIntersect.toArray(new String[toIntersect.size()]));
+        }
+
+        if (!unwanted.isEmpty()) {
+            String[] keys = unwanted.toArray(new String[unwanted.size() + 1]);
+            keys[keys.length - 1] = intersectResult;
+            intersectResult = difference(keys);
+        }
+        return intersectResult;
+    }
+
+    public void searchAndSort(String queryString, String sort)
+    {
+        // 排序字段前面有-号代表
+        boolean desc = sort.startsWith("-");
+        if (desc){
+            sort = sort.substring(1);
+        }
+        boolean alpha = !"updated".equals(sort) && !"id".equals(sort);
+        String by = "kb:doc:*->" + sort;
+        String id = parseAndSearch(queryString);
+
+        Transaction trans = RedisUtil.getRedis().multi();
+        trans.scard("WORD_SEARCH:" + id);
+        SortingParams params = new SortingParams();
+        if (desc) {
+            params.desc();
+        }
+        if (alpha){
+            params.alpha();
+        }
+        params.by(by);
+        params.limit(0, 20);
+        trans.sort("idx:" + id, params);
+        List<Object> results = trans.exec();
+
+    }
+
+    /**
+     * 解析传过来的搜索词
+     *
+     * @param query
+     * @return
+     */
+    public Map<String, Object> parseQuery(String query) {
         // 不包含的单词
         Set<String> unwanted = new HashSet<>();
         // 同义词
@@ -92,55 +163,10 @@ public class InvertedIndexes {
         if (!current.isEmpty()) {
             all.add(new ArrayList<>(current));
         }
-        return null;
-    }
-
-
-    public String[] parseQuery2(String query) {
-        // 不包含的单词
-        Set<String> unwanted = new HashSet<>();
-        // 放同义词的堆栈
-        Stack<String> current = new Stack<>();
-        // 结果集
-        List<List<String>> all = new ArrayList<>();
-        // 同义词
-        List<String> synonym = new ArrayList<>();
-        // 栈顶元素
-        String top = null;
-
-
-        Matcher matcher = QUREY_PATTERN.matcher(query);
-        while (matcher.find()) {
-            String word   = matcher.group().toLowerCase();
-            char   prefix = word.charAt(0);
-            if (prefix == '+' || prefix == '-') {
-                word = word.substring(1);
-            }
-            if (word.length() <= 2 || STOP_WORD.contains(word)) {
-                continue;
-            }
-            // 希望在结果集中不含有该单词
-            if (prefix == '-') {
-                unwanted.add(word);
-                continue;
-            }
-            // 某个单词前面是 + 则表示该单词和该单词的前一个单词是同义词
-            // 该单词的前一个单词的前面是 - 则找前前，以此类推
-            if (prefix != '+') {
-                if ((top = current.pop()) != null) {
-                    synonym.add(top);
-                }
-                if (synonym.size() > 0) {
-                    all.add(synonym);
-                    synonym.clear();
-                }
-            }
-            current.push(word);
-        }
-        if (!current.isEmpty()) {
-            all.add(new ArrayList<>(current));
-        }
-        return null;
+        Map<String, Object> result = new HashMap<>();
+        result.put("all", all);
+        result.put("unwanted", unwanted);
+        return result;
     }
 
 
@@ -205,20 +231,19 @@ public class InvertedIndexes {
      */
     private String setCommon(String method, String... items) {
         String      id    = UUID.randomUUID().toString();
-        Jedis       redis = RedisUtil.getRedis();
-        Transaction trans = redis.multi();
+        Transaction trans = RedisUtil.getRedis().multi();
         String[]    keys  = new String[items.length];
         for (int i = 0; i < items.length; i++) {
             keys[i] = "WORD_INDEX:" + items[i];
         }
         try {
             trans.getClass()
-                    .getDeclaredMethod(method, String.class, String[].class)
-                    .invoke(trans, "WORD_INDEX:" + id, keys);
+                    .getMethod(method, String.class, String[].class)
+                    .invoke(trans, "WORD_SEARCH:" + id, keys);
         } catch (Exception e) {
-            throw new RuntimeException("redis method " + method + " not existent");
+            throw new RuntimeException(e);
         }
-        trans.expire("WORD_INDEX:" + id, 30);
+        trans.expire("WORD_SEARCH:" + id, 30);
         trans.exec();
         return id;
     }

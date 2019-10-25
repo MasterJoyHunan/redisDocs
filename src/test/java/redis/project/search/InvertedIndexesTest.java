@@ -2,6 +2,10 @@ package redis.project.search;
 
 import org.junit.Test;
 
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
 import static org.junit.Assert.*;
 
 /**
@@ -28,8 +32,19 @@ public class InvertedIndexesTest {
 
     @Test
     public void parseQuery() {
-        new InvertedIndexes().parseQuery("+one +two +love +sex");
+        Map<String, Object> res      = new InvertedIndexes().parseQuery("+one +two +love -bobo +sex alics");
+        List<List<String>>  search   = (List<List<String>>) res.get("all");
+        Set<String>         unwanted = (Set<String>) res.get("unwanted");
+        System.out.println(search);
+        System.out.println(unwanted);
     }
+
+    @Test
+    public void parseAndSearch() {
+        String res = new InvertedIndexes().parseAndSearch("+again +two +love -ago +sex alics");
+        System.out.println(res);
+    }
+
 
     @Test
     public void intersect() {
