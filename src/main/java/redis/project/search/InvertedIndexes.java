@@ -1,7 +1,6 @@
 package redis.project.search;
 
 import redis.RedisUtil;
-import redis.base.Hash;
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.SortingParams;
 import redis.clients.jedis.Transaction;
@@ -96,31 +95,47 @@ public class InvertedIndexes {
         return intersectResult;
     }
 
-    public void searchAndSort(String queryString, String sort)
-    {
-        // 排序字段前面有-号代表
-        boolean desc = sort.startsWith("-");
-        if (desc){
+
+    /**
+     * 根据搜索进行排序
+     *  @param queryString 搜索字符串
+     * @param sort        排序字段
+     */
+    public Map searchAndSort(String queryString, String sort) {
+        String        id            = parseAndSearch(queryString);
+        SortingParams sortingParams = new SortingParams();
+
+        // 排序字段前面有 - 号代表倒序排列
+        if (sort.startsWith("-")) {
+            sortingParams.desc();
             sort = sort.substring(1);
         }
-        boolean alpha = !"updated".equals(sort) && !"id".equals(sort);
-        String by = "kb:doc:*->" + sort;
-        String id = parseAndSearch(queryString);
+
+        // 如果排序选择的是字符串字段，则按字符串继续排序， 如果选择的是数字，则按数字排序
+        if ("name".equals(sort)) {
+            sortingParams.alpha();
+        }
+
+        // 按照hash里该字段进行排序
+        String by = "user:*->" + sort;
+        sortingParams.by(by);
+
+        // 返回hash里对应的字段
+        String get = "name";
+        sortingParams.get(get);
+
+        // 最多返回20条数据
+        sortingParams.limit(0, 20);
 
         Transaction trans = RedisUtil.getRedis().multi();
         trans.scard("WORD_SEARCH:" + id);
-        SortingParams params = new SortingParams();
-        if (desc) {
-            params.desc();
-        }
-        if (alpha){
-            params.alpha();
-        }
-        params.by(by);
-        params.limit(0, 20);
-        trans.sort("idx:" + id, params);
-        List<Object> results = trans.exec();
-
+        trans.sort("WORD_SEARCH:" + id, sortingParams);
+        List<Object>        results   = trans.exec();
+        Map<String, Object> returnRes = new HashMap<>();
+        returnRes.put("id", id);
+        returnRes.put("number", results.get(0));
+        returnRes.put("res", results.get(1));
+        return returnRes;
     }
 
     /**
