@@ -2,8 +2,11 @@ package redis.project.ad;
 
 import redis.RedisUtil;
 import redis.clients.jedis.Transaction;
+import redis.clients.jedis.ZParams;
 import redis.project.search.InvertedIndexes;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -47,6 +50,21 @@ public class AdvertisementPlatform {
         trans.exec();
     }
 
+
+    /**
+     * 广告定向操作
+     *
+     * @param locations 地区
+     * @param content   关键词
+     * @return
+     */
+    public String targetAds(String[] locations, String content) {
+        String      id    = matchLocation(locations);
+        Transaction trans = RedisUtil.getRedis().multi();
+
+    }
+
+
     /**
      * 估算广告在1000次展示获取的收益
      *
@@ -64,6 +82,60 @@ public class AdvertisementPlatform {
             case "cpv":
             default:
                 return cost;
+        }
+    }
+
+
+    /**
+     * 按地区匹配广告
+     *
+     * @param locations 地区
+     * @return
+     */
+    public String matchLocation(String[] locations) {
+        // 交集
+        String[] items = new String[locations.length];
+        for (int i = 0; i < locations.length; i++) {
+            items[i] = "AD:LOCATION:" + locations[i];
+        }
+        String id = new InvertedIndexes().union(items);
+        return id;
+    }
+
+
+    /**
+     * 计算包含了内容匹配的附加值广告
+     *
+     * @param matched 根据地理位置匹配成功的广告
+     * @param base
+     * @param content 附加参数（关键词）
+     */
+    public void finishScoring(String matched, String base, String content) {
+        Map<String, Integer> bonusEcpm = new HashMap<>();
+        InvertedIndexes      ind       = new InvertedIndexes();
+        Set<String>          words     = ind.tokenize(content);
+        for (String word : words) {
+            String wordBonus = ind.zintersect(new ZParams().weightsByDouble(0, 1), matched, word);
+            bonusEcpm.put(wordBonus, 1);
+        }
+
+        if (bonusEcpm.size() > 0) {
+            String[] keys    = new String[bonusEcpm.size()];
+            int[]    weights = new int[bonusEcpm.size()];
+            int      index   = 0;
+            for (Map.Entry<String, Integer> bonus : bonusEcpm.entrySet()) {
+                keys[index] = bonus.getKey();
+                weights[index] = bonus.getValue();
+                index++;
+            }
+
+            ZParams minParams = new ZParams().aggregate(ZParams.Aggregate.MIN).weights(weights);
+            String  minimum   = ind.zunion(minParams, keys);
+
+            ZParams maxParams = new ZParams().aggregate(ZParams.Aggregate.MAX).weights(weights);
+            String  maximum   = ind.zunion(maxParams, keys);
+
+            String result = ind.zunion(new ZParams().weightsByDouble(2, 1, 1), base, minimum, maximum);
         }
     }
 }
