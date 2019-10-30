@@ -4,6 +4,7 @@ import redis.RedisUtil;
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.SortingParams;
 import redis.clients.jedis.Transaction;
+import redis.clients.jedis.ZParams;
 
 import java.util.*;
 import java.util.regex.Matcher;
@@ -98,7 +99,8 @@ public class InvertedIndexes {
 
     /**
      * 根据搜索进行排序
-     *  @param queryString 搜索字符串
+     *
+     * @param queryString 搜索字符串
      * @param sort        排序字段
      */
     public Map searchAndSort(String queryString, String sort) {
@@ -137,6 +139,66 @@ public class InvertedIndexes {
         returnRes.put("res", results.get(1));
         return returnRes;
     }
+
+
+    /**
+     * 复合排序
+     *
+     * @param queryString 搜索关键字
+     * @param desc        是否倒序
+     * @param weights     权重
+     * @return
+     */
+    public Map<String, Object> searchAndZsort(String queryString, boolean desc, Map<String, Integer> weights) {
+        int start = 0;
+        int end   = 20;
+
+        // 获取所有
+        String id = parseAndSearch(queryString);
+
+        // 排序 (key1的分值 * 0) + (key2的分值 * n) + (key3的分值 * n) 就等于排序结果
+        int         nameWeight   = weights.containsKey("name") ? weights.get("name") : 1;
+        int         walletWeight = weights.containsKey("wallet") ? weights.get("wallet") : 0;
+        String[]    keys         = new String[]{"WORD_SEARCH:" + id, "ARTICLE:update", "ARTICLE:votes"};
+        Transaction trans        = RedisUtil.getRedis().multi();
+        id = zintersect(new ZParams().weightsByDouble(0, nameWeight, walletWeight), keys);
+
+        trans.zcard("WORD_SEARCH:" + id);
+        if (desc) {
+            trans.zrevrange("WORD_SEARCH:" + id, start, start + end - 1);
+        } else {
+            trans.zrange("WORD_SEARCH:" + id, start, start + end - 1);
+        }
+        List<Object>        results   = trans.exec();
+        Map<String, Object> returnRes = new HashMap<>();
+        returnRes.put("id", id);
+        returnRes.put("total", results.get(0));
+        returnRes.put("list", results.get(1));
+        return returnRes;
+    }
+
+
+    /**
+     * 字符串转数字 --字符串拆解为Ascii码
+     *
+     * @param string 字符串
+     * @return
+     */
+    public long stringToScore(String string) {
+        List<Integer> list = new ArrayList<>();
+        for (int i = 0; i < Math.min(string.length(), 6); i++) {
+            list.add((int) string.charAt(i));
+        }
+        while (list.size() < 6) {
+            list.add(-1);
+        }
+        long score = 0;
+        for (int i : list) {
+            score = score * 257 + i + 1;
+        }
+        return score * 2 + (string.length() > 6 ? 1 : 0);
+    }
+
 
     /**
      * 解析传过来的搜索词
@@ -255,6 +317,58 @@ public class InvertedIndexes {
             trans.getClass()
                     .getMethod(method, String.class, String[].class)
                     .invoke(trans, "WORD_SEARCH:" + id, keys);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+        trans.expire("WORD_SEARCH:" + id, 30);
+        trans.exec();
+        return id;
+    }
+
+    /**
+     * 求交集 a & b
+     *
+     * @param item
+     * @return
+     */
+    public String zintersect(ZParams params, String... item) {
+        return zsetCommon("zinterstore", params, item);
+    }
+
+    /**
+     * 求并集 a | b
+     *
+     * @param item
+     * @return
+     */
+    public String zunion(ZParams params, String... item) {
+        return zsetCommon("zunionstore", params, item);
+    }
+
+    /**
+     * 求差集 a ^ b
+     *
+     * @param item
+     * @return
+     */
+    public String zdifference(ZParams params, String... item) {
+        return zsetCommon("zdiffstore", params, item);
+    }
+
+    /**
+     * 返回需查询的数据
+     *
+     * @param method 调用方法
+     * @param items  要查询的数据
+     * @return
+     */
+    private String zsetCommon(String method, ZParams params, String... items) {
+        String      id    = UUID.randomUUID().toString();
+        Transaction trans = RedisUtil.getRedis().multi();
+        try {
+            trans.getClass()
+                    .getMethod(method, String.class, ZParams.class, String[].class)
+                    .invoke(trans, "WORD_SEARCH:" + id, params, items);
         } catch (Exception e) {
             throw new RuntimeException(e);
         }

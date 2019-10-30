@@ -50,4 +50,9 @@ public class InvertedIndexesTest {
         Map res = new InvertedIndexes().searchAndSort("+joy +two +love -ago +sex alics", "name");
         System.out.println(res);
     }
+
+    @Test
+    public void t() {
+        System.out.println("s".charAt(2));
+    }
 }
