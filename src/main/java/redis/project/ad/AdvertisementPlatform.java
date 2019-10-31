@@ -1,6 +1,7 @@
 package redis.project.ad;
 
 import redis.RedisUtil;
+import redis.clients.jedis.Jedis;
 import redis.clients.jedis.Transaction;
 import redis.clients.jedis.ZParams;
 import redis.project.search.InvertedIndexes;
@@ -52,7 +53,7 @@ public class AdvertisementPlatform {
         // 记录估算浏览千次收益
         trans.zadd("AD:ECPM:", ecpm, id);
         // 记录单次收益
-        trans.zadd("AD:BASE_COST", cost, id);
+        trans.zadd("AD:BASE_COST:", cost, id);
         trans.exec();
     }
 
@@ -87,11 +88,12 @@ public class AdvertisementPlatform {
         }
 
         List<String> list = (List<String>) res.get(1);
-        String id = list.iterator().next();
-        if (id != null) {
-
+        String       id   = list.iterator().next();
+        if (id == null) {
+            return null;
         }
-        
+        recordTargetingResult((Long) res.get(0), id, (Set<String>) target.get("word"));
+        return id;
     }
 
 
@@ -147,7 +149,8 @@ public class AdvertisementPlatform {
         result.put("words", words);
         for (String word : words) {
             // 匹配地理位置和关键词的交集 matchedAds & word
-            String wordBonus = ind.zintersect(new ZParams().weightsByDouble(0, 1), matchedAds, "AD:WORD:" + word);
+            // word => 假设我们为关键词做了附加值操作
+            String wordBonus = ind.zintersect(new ZParams().weightsByDouble(0, 1), matchedAds, "AD:WORD_EXT:" + word);
             bonusEcpm.put(wordBonus, 1);
         }
 
@@ -165,17 +168,177 @@ public class AdvertisementPlatform {
             index++;
         }
 
-        // 聚合交集中最小值
+        // 聚合并集中最小值 a | b
         ZParams minParams = new ZParams().aggregate(ZParams.Aggregate.MIN).weightsByDouble(weights);
         String  minimum   = ind.zunion(minParams, keys);
 
-        // 聚合交集中最大值
+        // 聚合并集中最大值 a | b
         ZParams maxParams = new ZParams().aggregate(ZParams.Aggregate.MAX).weightsByDouble(weights);
         String  maximum   = ind.zunion(maxParams, keys);
 
-        // 聚合交集中平均值
-        ind.zunion(new ZParams().weightsByDouble(2, 1, 1), baseEcpm, minimum, maximum);
+        // 聚合并集中平均值 a | b
+        ind.zunion(new ZParams().weightsByDouble(1, .5, .5), baseEcpm, minimum, maximum);
         result.put("base", baseEcpm);
         return result;
+    }
+
+
+    /**
+     * @param targetId 上下文ID
+     * @param adId     被推荐的广告ID
+     * @param words    关键词
+     */
+    public void recordTargetingResult(long targetId, String adId, Set<String> words) {
+        Jedis redis = RedisUtil.getRedis();
+
+        // 该广告的关键词
+        Set<String> terms = redis.smembers("AD:WORD:" + adId);
+
+        // 获取该广告的计费方式
+        String type = redis.hget("AD:TYPES:", adId);
+
+        Transaction trans = redis.multi();
+
+        // 广告的关键词 + 当前搜索的关键词
+        terms.addAll(words);
+        if (terms.size() > 0) {
+            // 不知道这是干嘛的
+            String matchedKey = "AD:MATCHED:" + targetId;
+            for (String term : terms) {
+                trans.sadd(matchedKey, term);
+                trans.zincrby("AD:VIEWS:" + adId, 1, term);
+            }
+            trans.expire(matchedKey, 900);
+        }
+
+        // 该广告类型的广告查看的次数
+        trans.incr("AD:TYPE_VIEWS:" + type);
+
+        // 将该广告匹配的关键词次数 + 1 自己ID的次数 + 1
+        trans.zincrby("AD:VIEWS:" + adId, 1, "");
+
+        List<Object> response = trans.exec();
+        double       views    = (Double) response.get(response.size() - 1);
+
+        // 100 为匹配单次计算附加值
+        if ((views % 100) == 0) {
+//            updateCpms(conn, adId);
+        }
+    }
+
+
+    /**
+     * 广告被点击执行
+     *
+     * @param targetId 上下文ID
+     * @param adId     广告ID
+     * @param action   是否执行了操作(有时候，点击了广告并没有在里面进行操作)
+     */
+    public void recordClick(long targetId, String adId, boolean action) {
+        Jedis       redis    = RedisUtil.getRedis();
+        String      clickKey = "AD:CLICKS:" + adId;
+        String      matchKey = "AD:MATCHED:" + targetId;
+        String      adType   = redis.hget("AD:TYPES:", adId);
+        Transaction trans    = redis.multi();
+        Set<String> matched  = redis.smembers(matchKey);
+        matched.add("");
+        if ("cpa".equals(adType)) {
+            trans.expire(matchKey, 900);
+            if (action) {
+                clickKey = "AD:ACTIONS:" + adId;
+            }
+        }
+
+        // 如果点击广告进去，并且进行了操作
+        if (action && "cpa".equals(adType)) {
+            trans.incr("AD:" + adType + ":ACTION");
+        } else {
+            trans.incr("AD:" + adType + ":CLICKS");
+        }
+
+        for (String word : matched) {
+            trans.zincrby(clickKey, 1, word);
+        }
+        trans.exec();
+    }
+
+
+    /**
+     * 更新单次的附加值
+     *
+     * @param adId
+     */
+    public void updateCpms(String adId) {
+        Jedis        redis = RedisUtil.getRedis();
+        Transaction  trans;
+        List<Object> res;
+        // 查看广告类型
+        // 查看广告单价
+        // 查广告所有关键词
+        trans = redis.multi();
+        trans.hget("AD:TYPES:", adId);
+        trans.zscore("AD:BASE_COST:", adId);
+        trans.smembers("AD:WORD:" + adId);
+        res = trans.exec();
+        if (res.size() == 0) {
+            return;
+        }
+        String   type      = (String) res.get(0);
+        double   base_cost = (double) res.get(1);
+        String[] words     = (String[]) res.get(2);
+
+        // 获取广告类型被匹配多少次
+        // 获取广告类型（操作量）次数
+        trans = redis.multi();
+        String which = "cpa".equals(type) ? "ACTION" : "CLICKS";
+        trans.get("AD:TYPE_VIEWS:" + type);
+        trans.get("AD:" + type + ":" + which);
+        trans.exec();
+        res = trans.exec();
+        if (res.size() == 0) {
+            return;
+        }
+
+        int ecpm = res.get(0) == null ? (int) res.get(0) : 1;
+        int avg  = res.get(1) == null ? (int) res.get(1) : 1;
+
+        Map<String, Double> AVG_1K = new HashMap<>();
+        AVG_1K.put(type, 1000.0 * avg / ecpm);
+        if ("cpm".equals(type)) {
+            return;
+        }
+
+        // 广告被查看的次数
+        // 广告被操作的次数
+        String viewKey  = "AD:VIEWS:" + adId;
+        String clickKey = "AD:" + which + ":" + adId;
+        trans = redis.multi();
+        trans.zscore(viewKey, "");
+        trans.zscore(clickKey, "");
+        res = trans.exec();
+        if (res.size() == 0) {
+            return;
+        }
+
+        int idViews = res.get(0) == null ? 0 : (int) res.get(0);
+        int idClick = res.get(1) == null ? 0 : (int) res.get(1);
+
+        // 没人点击
+        double ad_ecpm = 0;
+        trans = redis.multi();
+        if (idClick < 1) {
+            ad_ecpm = redis.zscore("AD:ECPM:", adId);
+        } else {
+            ad_ecpm = toECPM(type, idViews, idClick, base_cost);
+            trans.zadd("AD:ECPM:", ad_ecpm, adId);
+        }
+
+        for (String word : words) {
+            trans.zscore(viewKey, word );
+            trans.zscore(clickKey, word);
+            trans.exec();
+        }
+        trans.exec();
+
     }
 }
