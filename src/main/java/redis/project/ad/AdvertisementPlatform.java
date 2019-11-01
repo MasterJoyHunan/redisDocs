@@ -12,7 +12,8 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * 广告平台
+ * 广告定向平台
+ * -----云里雾里 TODO 无法使用
  *
  * @author joy
  * @time 2019/10/30 08:15
@@ -332,13 +333,23 @@ public class AdvertisementPlatform {
             ad_ecpm = toECPM(type, idViews, idClick, base_cost);
             trans.zadd("AD:ECPM:", ad_ecpm, adId);
         }
+        trans.exec();
 
         for (String word : words) {
-            trans.zscore(viewKey, word );
+            trans.zscore(viewKey, word);
             trans.zscore(clickKey, word);
-            trans.exec();
+            res = trans.exec();
+            if (res.size() == 0) {
+                continue;
+            }
+
+            double views    = res.get(0) == null ? (double) res.get(0) : 1;
+            double click    = res.get(1) == null ? (double) res.get(1) : 0;
+            double wordEcpm = toECPM(type, views, click, ecpm);
+            double bonus = wordEcpm - ecpm;
+            // 为广告关键词添加附加值
+            redis.zadd("AD:WORD_EXT:"+word, bonus, adId);
         }
-        trans.exec();
 
     }
 }

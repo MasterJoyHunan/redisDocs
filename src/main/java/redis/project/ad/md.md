@@ -16,4 +16,6 @@
 | AD:ACTIONS:(ad_id)| zset | 关键词(操作) => 被匹配的次数 |
 | AD:(type):ACTION| string | 广告(计费方式)操作量 |
 | AD:(type):CLICKS| string | 广告计费方式点击量 |
+| AD:WORD_EXT:| zset | 广告关键词 => 附加值|
+
 
