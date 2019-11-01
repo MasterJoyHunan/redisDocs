@@ -46,18 +46,18 @@ public class Queue extends Thread {
         Jedis redis = RedisUtil.getRedis();
         while (!quit) {
             // 按优先级弹出消息队列
-            List<String> emailData = redis.blpop(30,
+            List<String> queue = redis.blpop(30,
                     "QUEUE:LEVEL_1_DELAYED",
                     "QUEUE:LEVEL_1",
                     "QUEUE:LEVEL_2_DELAYED",
                     "QUEUE:LEVEL_2",
                     "QUEUE:LEVEL_3_DELAYED",
                     "QUEUE:LEVEL_3");
-            if (emailData.size() == 0) {
+            if (queue.size() == 0) {
                 continue;
             }
 
-            String data = emailData.get(emailData.size() - 1);
+            String data = queue.get(queue.size() - 1);
             // 我们需要的消息类型 [类，方法，参数，]
             // 反射执行
             QueueDTO queueDTO = new Gson().fromJson(data, QueueDTO.class);

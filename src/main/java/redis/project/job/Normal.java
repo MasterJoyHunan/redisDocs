@@ -45,6 +45,12 @@ public class Normal {
         // 获取企业需要的技能的总数，一样的就是匹配的
         redis.zinterstore(jobScores, new ZParams().weightsByDouble(-1, 1), jobScores, "JOB:NEED_SKILL_LENGTH:");
         redis.expire(jobScores, 50);
+
+        // 技能熟练度
+
+
+        // 技能使用年限
+
         return redis.zrangeByScore(jobScores, 0, 0);
     }
 
