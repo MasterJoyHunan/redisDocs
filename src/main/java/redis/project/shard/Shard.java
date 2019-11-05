@@ -14,12 +14,11 @@ import java.util.zip.CRC32;
 public class Shard {
 
     /**
-     * @param base         基础hash名字
-     * @param key          将要被储存到分片hash里面的键
+     * @param base         基础名字 (hash set zset list) 不包含string string有单独分片机制
+     * @param key          将要被储存到分片里面的键 (hash=>key, set=>member, zset=>member, list=>item)
      * @param totalElement 预计元素总数量
      * @param shardSize    每个分片里包含的数量
      * @return
-     * @since 9
      */
     public static String shardKey(String base, String key, int totalElement, int shardSize) {
         boolean isNumber = true;

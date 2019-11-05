@@ -1,7 +1,5 @@
 package redis.project.logs;
 
-import com.google.gson.Gson;
-import com.google.gson.reflect.TypeToken;
 import redis.RedisUtil;
 import redis.clients.jedis.Jedis;
 

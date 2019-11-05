@@ -15,12 +15,6 @@ import java.util.*;
  */
 public class CleanCounters extends Thread {
 
-//    private long timeOffset = 86400000;
-
-/*    public CleanCounters(long timeOffset) {
-        this.timeOffset = timeOffset;
-    }*/
-
     @Override
     public void run() {
         Jedis redis  = RedisUtil.getRedis();
