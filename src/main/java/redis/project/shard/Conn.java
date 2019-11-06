@@ -1,6 +1,5 @@
 package redis.project.shard;
 
-import redis.RedisUtil;
 import redis.clients.jedis.Jedis;
 import redis.project.config.Config;
 

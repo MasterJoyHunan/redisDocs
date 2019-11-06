@@ -103,7 +103,7 @@ public class InvertedIndexes {
      * @param queryString 搜索字符串
      * @param sort        排序字段
      */
-    public Map searchAndSort(String queryString, String sort) {
+    public Map<String, Object> searchAndSort(String queryString, String sort) {
         String        id            = parseAndSearch(queryString);
         SortingParams sortingParams = new SortingParams();
 
@@ -123,8 +123,8 @@ public class InvertedIndexes {
         sortingParams.by(by);
 
         // 返回hash里对应的字段
-        String get = "name";
-        sortingParams.get(get);
+//        String get = "name";
+//        sortingParams.get(get);
 
         // 最多返回20条数据
         sortingParams.limit(0, 20);

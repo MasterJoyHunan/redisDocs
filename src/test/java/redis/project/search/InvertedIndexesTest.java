@@ -51,8 +51,4 @@ public class InvertedIndexesTest {
         System.out.println(res);
     }
 
-    @Test
-    public void t() {
-        System.out.println("s".charAt(2));
-    }
 }
