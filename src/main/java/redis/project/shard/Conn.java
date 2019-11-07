@@ -26,13 +26,13 @@ public class Conn {
     /**
      * 在多master情况下，获取分片master实例
      *
-     * @param component
      * @param key
+     * @param member
      * @param shardCount
      * @return
      */
-    public static Jedis getShardConnect(String component, String key, int shardCount) {
-        String   shardId = Shard.shardKey(component, "x" + key, shardCount, 2);
+    public static Jedis getShardConnect(String key, String member, int shardCount) {
+        String   shardId = Shard.shardKey(key, "x" + member, shardCount, 2);
         String[] shards  = shardId.split(":");
         return getRedisConn(shards[shards.length - 1]);
     }
