@@ -82,7 +82,4 @@ public class CleanCounters extends Thread {
         int index = Collections.binarySearch(values, key);
         return index < 0 ? Math.abs(index) - 1 : index + 1;
     }
-
-
-
 }
