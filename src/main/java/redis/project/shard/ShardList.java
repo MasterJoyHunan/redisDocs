@@ -136,12 +136,16 @@ public class ShardList {
         Pipeline pipe = RedisUtil.getRedis().pipelined();
         timeout = Math.max(timeout, 0) <= 0 ? Math.max(timeout, 0) : 2 * 64;
         long   end          = System.currentTimeMillis() + timeout;
-        String currentSharp = "blpop".equals(type) ? "first" : "last";
+        String currentSharp = "blpop".equals(type) ? ":first" : ":last";
         while (System.currentTimeMillis() < end) {
+
+            // 如果所有分片里面有数据，直接弹出就好了
             String getPop = "blpop".equals(type) ? shardLpop(key) : shardRpop(key);
             if (getPop == null || getPop.equals(dummy)) {
                 return getPop;
             }
+
+            // 所有分片里面如果没有数据，根据条件获取需要阻塞弹出的分片
             String shard = RedisUtil.getRedis().get(key + currentSharp);
             shard = shard == null ? "0" : shard;
 
@@ -154,6 +158,7 @@ public class ShardList {
             argv.add("blpop".equals(type) ? "lpush" : "rpush");
             argv.add(dummy);
 
+            // 如果程序在执行过程中，其他客户端对分片插入N条数据，导致 first/last 变化，则插入假数据
             pipe.eval(sharded_bpop_lua(), keys, argv);
             if ("blpop".equals(type)) {
                 pipe.blpop(1, key + ":" + shard);
@@ -166,6 +171,8 @@ public class ShardList {
                 return null;
             }
             String result = (String) res.get(res.size() - 1);
+
+            // 如果弹出的是空，或者是假数据，则再次循环
             if (result != null && result.equals(dummy)) {
                 return result;
             }
