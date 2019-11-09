@@ -12,11 +12,22 @@ public class ShardListTest {
 
     @Test
     public void shardLpush() {
-        new ShardList().shardLpush("TEST_LIST", new String[] {"q", "w", "e", "r", "t"});
+        new ShardList().shardLpush("TEST_LIST", new String[]{"q", "w", "e", "r", "t"});
     }
 
     @Test
     public void shardRpush() {
-        new ShardList().shardRpush("TEST_LIST", new String[] {"a", "b", "c", "d", "e"});
+        new ShardList().shardRpush("TEST_LIST", new String[]{"a", "b", "c", "d", "e"});
     }
+
+    @Test
+    public void shardLpop() {
+        System.out.println(new ShardList().shardLpop("TEST_LIST"));
+    }
+
+    @Test
+    public void shardRpop() {
+        System.out.println(new ShardList().shardRpop("TEST_LIST"));
+    }
+
 }
