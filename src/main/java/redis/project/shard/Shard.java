@@ -1,5 +1,7 @@
 package redis.project.shard;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.zip.CRC32;
 
 /**
